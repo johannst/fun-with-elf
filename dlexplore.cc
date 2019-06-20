@@ -2,12 +2,14 @@
 #include <iomanip>
 #include <cassert>
 #include <string>
+#include <vector>
 
 // References
 // [1] man 5 elf
 // [2] https://refspecs.linuxfoundation.org/elf/gabi4+/ch5.dynamic.html
+// [3] http://refspecs.linuxbase.org/elf/elf.pdf
 
-#define __USE_GNU
+//#define __USE_GNU
 // __USE_GNU -- enable gnu extensions in link.h
 //   struct dl_phdr_info
 //   int dl_iterate_phdr(...)
@@ -26,7 +28,7 @@ struct link_map* get_my_link_map () {
     }
 
     assert(r_debug);
-    printf("got DT_DEBUG @%p\n", r_debug);
+    //printf("got DT_DEBUG @%p\n", r_debug);
     return r_debug->r_map;
 }
 
@@ -45,6 +47,7 @@ struct DynamicSymbolInfo {
     void parse(struct link_map& lm);
     void dump() const;
     bool hasSymbol(const char* symbol) const;
+    const std::string& name() const { return mLinkMapName; }
 
     private:
     struct ElfHashTable {
@@ -77,7 +80,7 @@ struct DynamicSymbolInfo {
 };
 
 void DynamicSymbolInfo::parse(struct link_map& lm) {
-    mLinkMapName.assign(lm.l_name);
+    mLinkMapName.assign(!std::string(lm.l_name).empty() ? lm.l_name : "<no_name>");
 
     for (ElfW(Dyn)* dyn = lm.l_ld; dyn->d_tag != DT_NULL; ++dyn) {
         assert(dyn);
@@ -170,7 +173,7 @@ void DynamicSymbolInfo::dump() const {
     for (uint32_t i=0; i<mHashTable.mNumBucket; ++i) {
         if (mHashTable.mBucket[i] != STN_UNDEF) {
             for (uint32_t j=mHashTable.mBucket[i]; j!=STN_UNDEF; j=mHashTable.mChain[j]) {
-                const ElfW(Sym)* elf_symbol = (const ElfW(Sym)*)((char*)mSymbolTable + (mSymbolTableEntrySize * j));
+                const ElfW(Sym)* elf_symbol = (const ElfW(Sym)*)((const char*)mSymbolTable + (mSymbolTableEntrySize * j));
                 if (elf_symbol->st_name < mStringTableSize) {
                     const char* symstr = &mStringTable[elf_symbol->st_name];
                     if (symstr) {
@@ -187,6 +190,10 @@ bool DynamicSymbolInfo::hasSymbol(const char* symbol_name) const {
     assert(mSymbolTable);
     assert(mStringTable);
     assert(symbol_name);
+
+    if (mHashTable.mNumBucket == 0) {
+        return false;
+    }
 
     /// Symbol lookup via HashTable
     ///
@@ -207,7 +214,7 @@ bool DynamicSymbolInfo::hasSymbol(const char* symbol_name) const {
 
     uint32_t hash = elfHash(reinterpret_cast<const unsigned char*>(symbol_name));
     for (uint32_t idx=mHashTable.mBucket[hash % mHashTable.mNumBucket]; idx!=STN_UNDEF; idx=mHashTable.mChain[idx]) {
-        const ElfW(Sym)* elf_symbol = (const ElfW(Sym)*)((char*)mSymbolTable + (mSymbolTableEntrySize * idx));
+        const ElfW(Sym)* elf_symbol = (const ElfW(Sym)*)((const char*)mSymbolTable + (mSymbolTableEntrySize * idx));
         if (elf_symbol->st_name < mStringTableSize) {
             const char* symstr = &mStringTable[elf_symbol->st_name];
             if (symstr && std::string(symstr).compare(symbol_name) == 0) {
@@ -223,19 +230,21 @@ int main () {
     // our link_map is the first list entry
     assert(my_lmap && my_lmap->l_prev==0);
 
+    std::vector<DynamicSymbolInfo> dyn_sym_infos;
     for (struct link_map* lm = my_lmap; lm!=0; lm=lm->l_next) {
-        assert(lm);
-
         if (std::string(lm->l_name).find("linux-vdso.so") != std::string::npos) {
-            printf("Skip walking dynamic tags fro linux-vdso\n");
+            std::cout << "Skip walking dynamic tags for linux-vdso" << std::endl;
             continue;
         }
 
-        DynamicSymbolInfo dsi;
-        dsi.parse(*lm);
-        //dsi.dump();
+        dyn_sym_infos.emplace_back();
+        dyn_sym_infos.back().parse(*lm);
+    }
 
-        std::cout << lm->l_name << " has write? " << dsi.hasSymbol("write") << std::endl;
+    for (const DynamicSymbolInfo& dsi : dyn_sym_infos) {
+        std::cout << "Found " << dsi.name() << std::endl;
+        const char* sym = "recv";
+        std::cout << "\thas symbol=" << sym << " ? " << (dsi.hasSymbol(sym) ? "found" : "not found") << std::endl;
     }
 
 ///#ifdef __USE_GNU
