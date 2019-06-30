@@ -246,8 +246,23 @@ int main () {
 
     for (const DynamicSymbolInfo& dsi : dyn_sym_infos) {
         std::cout << "Found " << dsi.name() << std::endl;
-        const char* sym = "recv";
-        std::cout << "\thas symbol=" << sym << " ? " << (dsi.hasSymbol(sym) ? "found" : "not found") << std::endl;
+    }
+
+    while (true) {
+        std::string input;
+        std::cout << "Please enter a symbol to look for ('q' to exit):\n> ";
+        std::cin >> input;
+        if (input.compare("q") == 0) {
+            break;
+        }
+        {
+            std::cout << "Looking for sym=" << input << " ..." << std::endl;
+            for (const DynamicSymbolInfo& dsi : dyn_sym_infos) {
+                if (dsi.hasSymbol(input.c_str())) {
+                    std::cout << "... found in " << dsi.name() << std::endl;
+                }
+            }
+        }
     }
 
 ///#ifdef __USE_GNU
