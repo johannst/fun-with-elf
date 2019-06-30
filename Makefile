@@ -1,3 +1,6 @@
+# fun-with-elf -- Makefile
+# author: johannst
+
 CC = clang++
 CCFLAGS = -Wall -Wextra -Werror -g -O0
 

@@ -1,3 +1,6 @@
+// fun-with-elf -- dlexplore.cc
+// author: johannst
+
 #include <iostream>
 #include <iomanip>
 #include <cassert>
